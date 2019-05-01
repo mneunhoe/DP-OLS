@@ -190,30 +190,53 @@ qlap <- function(p, mu=0, b=1) {
     return(q)
 }
 
+# Dimensions of "covariance matrix"
 d <- nrow(covariance)
+
+# Number of observations is 1'1 
 n <- covariance[2, 2]
+
+# Set interesting epsilon values
 epsilons <- c(0.01, 0.1, 0.3, 0.5, 0.7, 1, 5, 100000)
+
+# Set number of repetitions
 n_rep <- 100
+
+# Set up arrays to hold the results
+# res will hold the regression coefficients
 res <- array(NA, dim = c(n_rep, d-1, length(epsilons)))
+# res_se will hold the standard errors of the regression coefficients (if X'X is invertable, else NA)
 res_se <- array(NA, dim = c(n_rep, d-1, length(epsilons)))
 
+# Loop over epsilon values and number of repetitions.
 for(epsilon in 1:length(epsilons)){
 for(rep in 1:n_rep){
 # Laplace Noise according to Jian, Xie & Zhang 2015
+
+# b is the scale parameter for the Laplace distribution
 b <- (2*d)/(n*epsilons[epsilon])
+
+# Draw (d^2 + d) / 2 values (lower/upper triangle plus diagonal) from the Laplace distribution with b.
 raw_L <- dpNoise((d^2 + d)/2, b, dist = "laplace")
+
+# Put the vector of drawn values into the right positions of a d x d matrix
 L <- matrix(NA, nrow = d, ncol = d)
 L[upper.tri(L, diag = T)] <- raw_L
 L[lower.tri(L)] <- t(L)[lower.tri(L)]
 
+# Is this ok? Calculate the noisy version of the "covariance matrix".
 dp_cov <- (covariance/n + L) * n
 
+# Get regression coefficients from noisy covariance matrix
 res[rep, ,epsilon] <- ols_cov(dp_cov)[,1]
+
+# Get standard errors of the regression coefficients from the noisy covariance matrix (if possible, throws a warning if X'X is not invertable.)
 res_se[rep, ,epsilon] <- ols_cov(dp_cov)[,2]
 }}
-res
-corrs <- NULL
-bs <- NULL
+```
+
+```{r Plotting I}
+# Put it all in a plot
 par(mfrow = c(2, 4))
 for (epsilon in 1:length(epsilons)) {
   plot(
@@ -227,10 +250,7 @@ for (epsilon in 1:length(epsilons)) {
     las = 1,
     bty = "n"
   )
-  b <- (2*d)/(n*epsilons[epsilon]) * 10000 
-  bs <- c(bs, b)
-  corr <- (covariance[3,3]/(n - 2)) / (covariance[3,3]/(n - 2) + 2*b^2/n)
-  corrs <- c(corrs, corr)
+  
   for (rep in 1:n_rep) {
     abline(
       a = res[rep, , epsilon][1],
@@ -248,19 +268,13 @@ for (epsilon in 1:length(epsilons)) {
   abline(v = 0, h = 0)
 }
 ols_cov(covariance)
-
-# cbind(res[rep, ,3],res_se[rep, ,3])
-# plot(density(res_se[,1,3], na.rm = T), ylim = c(0, 400))
-# for(i in 2:length(epsilons)){
-# lines(density(res_se[,1,i], na.rm = T))
-# }
-# abline(v = ols_cov(covariance)[1,2])
 ```
 
 ```{r DP-OLS as in PSIlence Library}
-d <- nrow(covariance)
+# N is 1'1 
 n <- covariance[2, 2]
 
+# Function to calculate the sensitivity of the covariance matrix from PSIlence Library
 covariance.sensitivity <- function(n, rng, intercept = 2) {
     diffs <- apply(rng, 1, diff)
     if (!is.null(intercept)) { diffs[intercept] <- 1 }
@@ -273,41 +287,58 @@ covariance.sensitivity <- function(n, rng, intercept = 2) {
     }
     return(sensitivity)
 }
-covariance
 
+# Set ranges for every data column
 rng <- matrix(NA,
               nrow = k + 1,
               ncol = 2,
               byrow = TRUE)
 
+# Calculate ranges from min and max
 for (i in 1:ncol(df)) {
   rng[i, ] <- c(min(df[, i]), max(df[, i]))
 }
 
-rng
+# Calculate sensitivities
 sens <- covariance.sensitivity(n = n, rng = rng)
 
+# Set interesting values of epsilon
 epsilons <- c(0.01, 0.1, 0.3, 0.5, 0.7, 1, 5, 100)
+
+# Set number of repetitions
 n_rep <- 100
+
+# Create arrays to collect results
 res <- array(NA, dim = c(n_rep, d-1, length(epsilons)))
 res_se <- array(NA, dim = c(n_rep, d-1, length(epsilons)))
 
+# Loop over values of epsilon and repetitions
 for(epsilon in 1:length(epsilons)){
 for(rep in 1:n_rep){
-# Laplace Noise as implemented in the PSIlence R-library
 
-  
+  # Laplace Noise as implemented in the PSIlence R-library
 noise_scale <- sens / epsilons[epsilon]
 raw_L <- dpNoise(n=length(noise_scale), scale=noise_scale, dist='laplace')
+
+# Put the noise values in the right places in a d x d matrix
 L <- matrix(NA, nrow = d, ncol = d)
 L[lower.tri(L, diag = T)] <- raw_L
 L[upper.tri(L)] <- t(L)[upper.tri(L)]
 
+# Calculate noise covariance matrix
 dp_cov <- (covariance + L) 
 
+# Run regression on noisy covariance matrix
 res[rep, ,epsilon] <- ols_cov(dp_cov)[,1]
 res_se[rep, ,epsilon] <- ols_cov(dp_cov)[,2]
 }}
+```
+
+## Create Plots
+
+Produce plots from the results. The plots will be stored to the figures folder in the project directory.
+
+```{r Plotting}
 pdf(file = paste0("figures/dp_ols_n",n,".pdf"), width = 16, height = 9)
 par(mfrow = c(2, 4))
 for (epsilon in 1:length(epsilons)) {
@@ -340,6 +371,12 @@ for (epsilon in 1:length(epsilons)) {
   abline(v = 0, h = 0, col = "grey", lty = "dashed")
 }
 dev.off()
+```
+
+## Misc
+
+This could be interesting to look at.
+```{r Misc}
 ols_cov(covariance)
 
 cbind(res[rep, ,7],res_se[rep, ,7])
@@ -354,6 +391,7 @@ lines(density(res[,2,i], na.rm = T), col = i)
 abline(v = ols_cov(covariance)[2,1], col = "maroon3")
 ```
 
+# Old code / Trying DP-OLS with PSIlence library
 
  `rng` \ Numeric, a $p \times 2$ matrix where each row is a 2-tuple giving an a priori estimate of the lower and upper bounds of the $p^{\text{th}}$ variable in the data frame, including the response variable. Ranges should be entered in the order that they appear in the `formula`, such that for a formula `'y ~ x'`, the first row of `rng` should provide the lower and upper bounds on `y` and the second row should provide the lower and upper bounds on `x`.
 
