@@ -1,12 +1,12 @@
 ---
 title: "| Statistical Analyses and Differential Privacy. \n| An Empirical Analysis \n"
 author: "Marcel Neunhoeffer - University of Mannheim"
-date: "26 April 2019"
+date: "Last updated: `r format(Sys.time(), '%d %B, %Y')`"
 output:
+  pdf_document: default
+  html_document: default
   html_notebook:
     toc: yes
-  html_document: default
-  pdf_document: default
 ---
 
 ```{r setup, echo=FALSE, include=FALSE}
@@ -41,7 +41,7 @@ This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute
 
 Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
 
-# Load the data
+# Load/create the data
 
 ```{r}
 n <- 10000
@@ -50,10 +50,16 @@ x <- rnorm(n, 0, 2)
 y <- 2 + 3 * x + rnorm(n, 0, 1)
 
 dat <- data.frame(y = y, x = x)
-dat_outlier <- rbind(dat, c(10,-4))
+dat_outlier <- rbind(dat, c(10, -4))
 
-plot(x, y, pch = 19, col = adjustcolor("black", alpha = 0.7),
-     bty = "n", las = 1)
+plot(
+  x,
+  y,
+  pch = 19,
+  col = adjustcolor("black", alpha = 0.7),
+  bty = "n",
+  las = 1
+)
 ```
 
 # Run Regressions
@@ -87,7 +93,7 @@ ff <-
 # Create model frame from formula and data
 mf <- model.frame(ff, data = dat)
 
-# Transform model frame to numeric matrix with y in the first column and 
+# Transform model frame to numeric matrix with y in the first column and
 # Intercept in the second column.
 data_y <- model.response(mf, "numeric")
 data_x <- model.matrix(ff, data = mf)
@@ -104,56 +110,60 @@ int_col <- which(apply(df, 2, function(x)
   all(x == 1)))
 
 # Create ols_cov function
-ols_cov <- function(covariance, dp = FALSE, y_col = 1, int_col = 2) {
-########################################
-# Get some helpful indices
-########################################
-
-# Number of rows/columns
-n_cov <- nrow(covariance)
-
-# Number of independent variables
-k <- n_cov - 1
-
-########################################
-# Subset the matrix to important parts
-########################################
-
-# Number of observations in the data
-n <- covariance[int_col, int_col]
-
-# t(X) %*% X
-XtX <- covariance[-y_col,-y_col, drop = F]
-
-# t(X) %*% y
-Xty <- covariance[-y_col, y_col, drop = F]
-
-# t(y) %*% y
-yty <- covariance[y_col, y_col, drop = F]
-
-########################################
-# Calculate statistics of interest
-########################################
-
-# The sum of the squared residuals
-ete <- yty - (t(Xty) %*% solve(XtX) %*% Xty)
-
-# Solve linear system for vector of betas
-betas <- solve(XtX, Xty)
-
-# Calculate residual variance
-res_var <- as.numeric(ete / (n - k))
-
-# Calculate covaraince matrix of the coefficients
-cov_betas <- res_var * solve(XtX)
-
-# Calculate standard errors
-ses <- sqrt(diag(cov_betas))
-
-res <- cbind(betas, ses)
-colnames(res) <- c("Coefficients", "Standard Errors")
-return(res)
-}
+ols_cov <-
+  function(covariance,
+           dp = FALSE,
+           y_col = 1,
+           int_col = 2) {
+    ########################################
+    # Get some helpful indices
+    ########################################
+    
+    # Number of rows/columns
+    n_cov <- nrow(covariance)
+    
+    # Number of independent variables
+    k <- n_cov - 1
+    
+    ########################################
+    # Subset the matrix to important parts
+    ########################################
+    
+    # Number of observations in the data
+    n <- covariance[int_col, int_col]
+    
+    # t(X) %*% X
+    XtX <- covariance[-y_col, -y_col, drop = F]
+    
+    # t(X) %*% y
+    Xty <- covariance[-y_col, y_col, drop = F]
+    
+    # t(y) %*% y
+    yty <- covariance[y_col, y_col, drop = F]
+    
+    ########################################
+    # Calculate statistics of interest
+    ########################################
+    
+    # The sum of the squared residuals
+    ete <- yty - (t(Xty) %*% solve(XtX) %*% Xty)
+    
+    # Solve linear system for vector of betas
+    betas <- solve(XtX, Xty)
+    
+    # Calculate residual variance
+    res_var <- as.numeric(ete / (n - k))
+    
+    # Calculate covaraince matrix of the coefficients
+    cov_betas <- res_var * solve(XtX)
+    
+    # Calculate standard errors
+    ses <- sqrt(diag(cov_betas))
+    
+    res <- cbind(betas, ses)
+    colnames(res) <- c("Coefficients", "Standard Errors")
+    return(res)
+  }
 
 ols_cov(covariance)
 ```
@@ -161,39 +171,43 @@ ols_cov(covariance)
 
 ## DP-OLS
 
-```{r}
+```{r DP-OLS with noise as in JXZ 15, warning = FALSE}
 # Functions taken from PSIlence library
 
-dpUnif <- function(n, seed=NULL) {
-    if (!is.null(seed)) {
-        set.seed(seed)
-        return(runif(n))
-    }
-    return(openssl::rand_num(n))
+dpUnif <- function(n, seed = NULL) {
+  if (!is.null(seed)) {
+    set.seed(seed)
+    return(runif(n))
+  }
+  return(openssl::rand_num(n))
 }
 
-dpNoise <- function(n, scale, dist, shape=NULL, seed=NULL) {
-    u <- dpUnif(n, seed)
-    if (dist == 'laplace') {
-        return(qlap(u, b=scale))
-    } else if (dist == 'gaussian') {
-        return(qnorm(u, sd=scale))
-    } else if (dist == 'gamma') {
-        return(qgamma(u, scale=scale, shape=shape))
-    } else {
-        stop(sprintf('Distribution "%s" not understood', dist))
-    }
+dpNoise <- function(n,
+                    scale,
+                    dist,
+                    shape = NULL,
+                    seed = NULL) {
+  u <- dpUnif(n, seed)
+  if (dist == 'laplace') {
+    return(qlap(u, b = scale))
+  } else if (dist == 'gaussian') {
+    return(qnorm(u, sd = scale))
+  } else if (dist == 'gamma') {
+    return(qgamma(u, scale = scale, shape = shape))
+  } else {
+    stop(sprintf('Distribution "%s" not understood', dist))
+  }
 }
 
-qlap <- function(p, mu=0, b=1) {
-    q <- ifelse(p < 0.5, mu + b * log(2 * p), mu - b * log(2 - 2 * p))
-    return(q)
+qlap <- function(p, mu = 0, b = 1) {
+  q <- ifelse(p < 0.5, mu + b * log(2 * p), mu - b * log(2 - 2 * p))
+  return(q)
 }
 
 # Dimensions of "covariance matrix"
 d <- nrow(covariance)
 
-# Number of observations is 1'1 
+# Number of observations is 1'1
 n <- covariance[2, 2]
 
 # Set interesting epsilon values
@@ -204,35 +218,39 @@ n_rep <- 100
 
 # Set up arrays to hold the results
 # res will hold the regression coefficients
-res <- array(NA, dim = c(n_rep, d-1, length(epsilons)))
-# res_se will hold the standard errors of the regression coefficients (if X'X is invertable, else NA)
-res_se <- array(NA, dim = c(n_rep, d-1, length(epsilons)))
+res <- array(NA, dim = c(n_rep, d - 1, length(epsilons)))
+# res_se will hold the standard errors of the regression coefficients 
+# (if X'X is invertable, else NA)
+res_se <- array(NA, dim = c(n_rep, d - 1, length(epsilons)))
 
 # Loop over epsilon values and number of repetitions.
-for(epsilon in 1:length(epsilons)){
-for(rep in 1:n_rep){
-# Laplace Noise according to Jian, Xie & Zhang 2015
-
-# b is the scale parameter for the Laplace distribution
-b <- (2*d)/(n*epsilons[epsilon])
-
-# Draw (d^2 + d) / 2 values (lower/upper triangle plus diagonal) from the Laplace distribution with b.
-raw_L <- dpNoise((d^2 + d)/2, b, dist = "laplace")
-
-# Put the vector of drawn values into the right positions of a d x d matrix
-L <- matrix(NA, nrow = d, ncol = d)
-L[upper.tri(L, diag = T)] <- raw_L
-L[lower.tri(L)] <- t(L)[lower.tri(L)]
-
-# Is this ok? Calculate the noisy version of the "covariance matrix".
-dp_cov <- (covariance/n + L) * n
-
-# Get regression coefficients from noisy covariance matrix
-res[rep, ,epsilon] <- ols_cov(dp_cov)[,1]
-
-# Get standard errors of the regression coefficients from the noisy covariance matrix (if possible, throws a warning if X'X is not invertable.)
-res_se[rep, ,epsilon] <- ols_cov(dp_cov)[,2]
-}}
+for (epsilon in 1:length(epsilons)) {
+  for (rep in 1:n_rep) {
+    # Laplace Noise according to Jian, Xie & Zhang 2015
+    
+    # b is the scale parameter for the Laplace distribution
+    b <- (2 * d) / (n * epsilons[epsilon])
+    
+    # Draw (d^2 + d) / 2 values (lower/upper triangle plus diagonal) 
+    # from the Laplace distribution with b.
+    raw_L <- dpNoise((d ^ 2 + d) / 2, b, dist = "laplace")
+    
+    # Put the vector of drawn values into the right positions of a d x d matrix
+    L <- matrix(NA, nrow = d, ncol = d)
+    L[upper.tri(L, diag = T)] <- raw_L
+    L[lower.tri(L)] <- t(L)[lower.tri(L)]
+    
+    # Is this ok? Calculate the noisy version of the "covariance matrix".
+    dp_cov <- (covariance / n + L) * n
+    
+    # Get regression coefficients from noisy covariance matrix
+    res[rep, , epsilon] <- ols_cov(dp_cov)[, 1]
+    
+    # Get standard errors of the regression coefficients from the noisy 
+    # covariance matrix (if possible, throws a warning if X'X is not invertable.)
+    res_se[rep, , epsilon] <- ols_cov(dp_cov)[, 2]
+  }
+}
 ```
 
 ```{r Plotting I}
@@ -260,32 +278,35 @@ for (epsilon in 1:length(epsilons)) {
     )
   }
   abline(
-      a = ols_cov(covariance)[1,1],
-      b = ols_cov(covariance)[2,1],
-      col = adjustcolor("grey", alpha = 0.7),
-      lwd = 2
-    )
+    a = ols_cov(covariance)[1, 1],
+    b = ols_cov(covariance)[2, 1],
+    col = adjustcolor("grey", alpha = 0.7),
+    lwd = 2
+  )
   abline(v = 0, h = 0)
 }
 ols_cov(covariance)
 ```
 
-```{r DP-OLS as in PSIlence Library}
-# N is 1'1 
+```{r DP-OLS as in PSIlence Library, warning = FALSE}
+# N is 1'1
 n <- covariance[2, 2]
 
-# Function to calculate the sensitivity of the covariance matrix from PSIlence Library
-covariance.sensitivity <- function(n, rng, intercept = 2) {
-    diffs <- apply(rng, 1, diff)
-    if (!is.null(intercept)) { diffs[intercept] <- 1 }
-    sensitivity <- c()
-    for (i in 1:length(diffs)) {
-        for (j in i:length(diffs)) {
-            s <- ((n - 1) / n) * diffs[i] * diffs[j]
-            sensitivity <- c(sensitivity, s)
-        }
+# Function to calculate the sensitivity of the covariance matrix
+# slightly adapted from PSIlence Library
+covariance_sensitivity <- function(n, rng, intercept = 2) {
+  diffs <- apply(rng, 1, diff)
+  if (!is.null(intercept)) {
+    diffs[intercept] <- 1
+  }
+  sensitivity <- c()
+  for (i in 1:length(diffs)) {
+    for (j in i:length(diffs)) {
+      s <- ((n - 1) / n) * diffs[i] * diffs[j]
+      sensitivity <- c(sensitivity, s)
     }
-    return(sensitivity)
+  }
+  return(sensitivity)
 }
 
 # Set ranges for every data column
@@ -296,11 +317,11 @@ rng <- matrix(NA,
 
 # Calculate ranges from min and max
 for (i in 1:ncol(df)) {
-  rng[i, ] <- c(min(df[, i]), max(df[, i]))
+  rng[i,] <- c(min(df[, i]), max(df[, i]))
 }
 
 # Calculate sensitivities
-sens <- covariance.sensitivity(n = n, rng = rng)
+sens <- covariance_sensitivity(n = n, rng = rng)
 
 # Set interesting values of epsilon
 epsilons <- c(0.01, 0.1, 0.3, 0.5, 0.7, 1, 5, 100)
@@ -309,29 +330,32 @@ epsilons <- c(0.01, 0.1, 0.3, 0.5, 0.7, 1, 5, 100)
 n_rep <- 100
 
 # Create arrays to collect results
-res <- array(NA, dim = c(n_rep, d-1, length(epsilons)))
-res_se <- array(NA, dim = c(n_rep, d-1, length(epsilons)))
+res <- array(NA, dim = c(n_rep, d - 1, length(epsilons)))
+res_se <- array(NA, dim = c(n_rep, d - 1, length(epsilons)))
 
 # Loop over values of epsilon and repetitions
-for(epsilon in 1:length(epsilons)){
-for(rep in 1:n_rep){
-
-  # Laplace Noise as implemented in the PSIlence R-library
-noise_scale <- sens / epsilons[epsilon]
-raw_L <- dpNoise(n=length(noise_scale), scale=noise_scale, dist='laplace')
-
-# Put the noise values in the right places in a d x d matrix
-L <- matrix(NA, nrow = d, ncol = d)
-L[lower.tri(L, diag = T)] <- raw_L
-L[upper.tri(L)] <- t(L)[upper.tri(L)]
-
-# Calculate noise covariance matrix
-dp_cov <- (covariance + L) 
-
-# Run regression on noisy covariance matrix
-res[rep, ,epsilon] <- ols_cov(dp_cov)[,1]
-res_se[rep, ,epsilon] <- ols_cov(dp_cov)[,2]
-}}
+for (epsilon in 1:length(epsilons)) {
+  for (rep in 1:n_rep) {
+    # Laplace Noise as implemented in the PSIlence R-library
+    noise_scale <- sens / epsilons[epsilon]
+    raw_L <-
+      dpNoise(n = length(noise_scale),
+              scale = noise_scale,
+              dist = 'laplace')
+    
+    # Put the noise values in the right places in a d x d matrix
+    L <- matrix(NA, nrow = d, ncol = d)
+    L[lower.tri(L, diag = T)] <- raw_L
+    L[upper.tri(L)] <- t(L)[upper.tri(L)]
+    
+    # Calculate noise covariance matrix
+    dp_cov <- (covariance + L)
+    
+    # Run regression on noisy covariance matrix
+    res[rep, , epsilon] <- ols_cov(dp_cov)[, 1]
+    res_se[rep, , epsilon] <- ols_cov(dp_cov)[, 2]
+  }
+}
 ```
 
 ## Create Plots
@@ -339,7 +363,11 @@ res_se[rep, ,epsilon] <- ols_cov(dp_cov)[,2]
 Produce plots from the results. The plots will be stored to the figures folder in the project directory.
 
 ```{r Plotting}
-pdf(file = paste0("figures/dp_ols_n",n,".pdf"), width = 16, height = 9)
+pdf(
+  file = paste0("figures/dp_ols_n", n, ".pdf"),
+  width = 16,
+  height = 9
+)
 par(mfrow = c(2, 4))
 for (epsilon in 1:length(epsilons)) {
   plot(
@@ -363,12 +391,15 @@ for (epsilon in 1:length(epsilons)) {
     )
   }
   abline(
-      a = ols_cov(covariance)[1,1],
-      b = ols_cov(covariance)[2,1],
-      col = adjustcolor("grey", alpha = 0.7),
-      lwd = 2
-    )
-  abline(v = 0, h = 0, col = "grey", lty = "dashed")
+    a = ols_cov(covariance)[1, 1],
+    b = ols_cov(covariance)[2, 1],
+    col = adjustcolor("grey", alpha = 0.7),
+    lwd = 2
+  )
+  abline(v = 0,
+         h = 0,
+         col = "grey",
+         lty = "dashed")
 }
 dev.off()
 ```
@@ -379,16 +410,25 @@ This could be interesting to look at.
 ```{r Misc}
 ols_cov(covariance)
 
-cbind(res[rep, ,7],res_se[rep, ,7])
-par(mfrow = c(1,1))
-plot(density(res[,2,1], na.rm = T), ylim = c(0, 2), xlim = c(-10,10),
-     main = "", bty = "n", yaxt = "n", ylab = "")
-abline(v = mean(res[,2,1]))
-for(i in 2:length(epsilons)){
-lines(density(res[,2,i], na.rm = T), col = i)
-  abline(v = mean(res[,2,i]), col = i, lty = "dashed")
+cbind(res[rep, , 7], res_se[rep, , 7])
+par(mfrow = c(1, 1))
+plot(
+  density(res[, 2, 1], na.rm = T),
+  ylim = c(0, 2),
+  xlim = c(-10, 10),
+  main = "",
+  bty = "n",
+  yaxt = "n",
+  ylab = ""
+)
+abline(v = mean(res[, 2, 1]))
+for (i in 2:length(epsilons)) {
+  lines(density(res[, 2, i], na.rm = T), col = i)
+  abline(v = mean(res[, 2, i]),
+         col = i,
+         lty = "dashed")
 }
-abline(v = ols_cov(covariance)[2,1], col = "maroon3")
+abline(v = ols_cov(covariance)[2, 1], col = "maroon3")
 ```
 
 # Old code / Trying DP-OLS with PSIlence library
@@ -435,14 +475,31 @@ model$release(dat)
 summary(reg)
 print(model$result)
 
-plot(dat$x, dat$y, 
-     pch = 19, col = adjustcolor("black", 0.8),
-     xlab = "x", ylab = "y",
-     main = paste("Regression results. N = ",n),
-     las = 1, bty = "n")
+plot(
+  dat$x,
+  dat$y,
+  pch = 19,
+  col = adjustcolor("black", 0.8),
+  xlab = "x",
+  ylab = "y",
+  main = paste("Regression results. N = ", n),
+  las = 1,
+  bty = "n"
+)
 abline(reg, col = "grey", lwd = 2)
-abline(a = model$result$release[1,], b = model$result$release[2,], col = "maroon3", lwd = 2)
-legend("topleft", legend = c("OLS", paste("DP-OLS, epsilon = ", epsilon)), lty = "solid", lwd = 2, col = c("grey", "maroon3"))
+abline(
+  a = model$result$release[1, ],
+  b = model$result$release[2, ],
+  col = "maroon3",
+  lwd = 2
+)
+legend(
+  "topleft",
+  legend = c("OLS", paste("DP-OLS, epsilon = ", epsilon)),
+  lty = "solid",
+  lwd = 2,
+  col = c("grey", "maroon3")
+)
 ```
 
 
