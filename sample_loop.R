@@ -148,9 +148,25 @@ for (epsilon in 1:length(epsilons)) {
 dev.off()
 }
 
-mean_bias <- apply(n_list[[paste0(samp)]]$coef - 1, c(2, 3), mean)
+mean_bias <- apply(n_list[[paste0(samp)]]$coef - 1, c(2, 3), median)
 lo_bias <- apply(n_list[[paste0(samp)]]$coef - 1, c(2, 3), quantile, 0.025)
 hi_bias <- apply(n_list[[paste0(samp)]]$coef - 1, c(2, 3), quantile, 0.975)
 
-plot(mean_bias[,1], 1:4)
-
+plot(x = mean_bias[,1], y = c(4, 8, 12, 16), xlim = c(-40, 40),ylim = c(0, 17), bty = "n", yaxt = "n", ylab = "",
+     xlab = "Bias", pch = 20 )
+segments(x0 = lo_bias[,1], x1 = hi_bias[,1], y0 = c(4, 8, 12, 16))
+points(x = mean_bias[,2], y = c(4, 8, 12, 16)-0.5, pch = 20)
+segments(x0 = lo_bias[,2], x1 = hi_bias[,2], y0 = c(4, 8, 12, 16)-0.5)
+points(x = mean_bias[,3], y = c(4, 8, 12, 16)-1, pch = 20)
+segments(x0 = lo_bias[,3], x1 = hi_bias[,3], y0 = c(4, 8, 12, 16)-1)
+points(x = mean_bias[,4], y = c(4, 8, 12, 16)-1.5, pch = 20)
+segments(x0 = lo_bias[,4], x1 = hi_bias[,4], y0 = c(4, 8, 12, 16)-1.5)
+points(x = mean_bias[,5], y = c(4, 8, 12, 16)-2, pch = 20)
+segments(x0 = lo_bias[,5], x1 = hi_bias[,4], y0 = c(4, 8, 12, 16)-2)
+points(x = mean_bias[,6], y = c(4, 8, 12, 16)-2.5, pch = 20)
+segments(x0 = lo_bias[,6], x1 = hi_bias[,4], y0 = c(4, 8, 12, 16)-2.5)
+points(x = mean_bias[,7], y = c(4, 8, 12, 16)-3, pch = 20)
+segments(x0 = lo_bias[,7], x1 = hi_bias[,4], y0 = c(4, 8, 12, 16)-3)
+points(x = mean_bias[,8], y = c(4, 8, 12, 16)-3.5, pch = 20)
+segments(x0 = lo_bias[,8], x1 = hi_bias[,4], y0 = c(4, 8, 12, 16)-3.5)
+abline(h = c(4.25,8.25,12.25), lty = "dashed", col = "grey")

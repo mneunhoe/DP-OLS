@@ -15,7 +15,7 @@ What happens without a C-compiler?
 ```{r setup, echo=FALSE, include=FALSE}
 # Load libraries needed for this script. Install if needed.
 
-p_needed <- c("knitr", "devtools", "PSIlence")
+p_needed <- c("knitr", "devtools", "PSIlence", "reticulate")
 
 packages <- rownames(installed.packages())
 p_to_install <- p_needed[!(p_needed %in% packages)]
