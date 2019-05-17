@@ -9,6 +9,9 @@ output:
     toc: yes
 ---
 
+# 
+What happens without a C-compiler?
+
 ```{r setup, echo=FALSE, include=FALSE}
 # Load libraries needed for this script. Install if needed.
 
@@ -28,7 +31,7 @@ if (any(p_check == F)) {
     "Trying to install the following packages from github:",
     names(p_check[p_check == F])
   ))
-  install_github(p_needed_git)
+  devtools::install_github(p_needed_git)
 }
 p_check <- sapply(p_needed, require, character.only = TRUE)
 if (any(p_check == F)) {
@@ -41,19 +44,19 @@ This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute
 
 Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
 
-# Load/create the data
+# Setup population
 
 ```{r}
-n <- 10000
-x <- rnorm(n, 0, 2)
+n <- 100000
+x1 <- rnorm(n, 0, 2)
+x2 <- rnorm(n, 0, 2)
+y <- 1 + 1 * x1 + 1 * x2 + 1 * x1 * x2 + rnorm(n, 0, 1)
 
-y <- 2 + 3 * x + rnorm(n, 0, 1)
-
-dat <- data.frame(y = y, x = x)
+dat <- data.frame(y = y, x1 = x1, x2 = x2)
 dat_outlier <- rbind(dat, c(10, -4))
 
 plot(
-  x,
+  x1,
   y,
   pch = 19,
   col = adjustcolor("black", alpha = 0.7),
@@ -69,8 +72,8 @@ plot(
 n <- nrow(dat)
 
 # Number of regression coefficients
-k <- 2
-form <- 'y ~ x' 
+k <- 4
+form <- 'y ~ x1 + x2 + x1*x2' 
 ```
 
 
@@ -88,7 +91,7 @@ All OLS estimates (coefficients and standard errors) can be obtained from the "c
 ```{r OLS from Covariance Matrix}
 # Model Formula ff
 ff <-
-  y ~ x
+  y ~ x1 + x2 + x1*x2
 
 # Create model frame from formula and data
 mf <- model.frame(ff, data = dat)
@@ -258,7 +261,7 @@ for (epsilon in 1:length(epsilons)) {
 par(mfrow = c(2, 4))
 for (epsilon in 1:length(epsilons)) {
   plot(
-    dat$x,
+    dat$x1,
     dat$y,
     pch = 19,
     col = adjustcolor("black", 0.8),
@@ -429,7 +432,55 @@ for (i in 2:length(epsilons)) {
          lty = "dashed")
 }
 abline(v = ols_cov(covariance)[2, 1], col = "maroon3")
+
+
+par(mfrow = c(1, 1))
+plot(
+  density(res_se[, 2, 1], na.rm = T),
+  ylim = c(0, 200),
+  xlim = c(-0.1, 0.1),
+  main = "",
+  bty = "n",
+  yaxt = "n",
+  ylab = ""
+)
+abline(v = mean(res_se[, 2, 1]))
+for (i in 2:length(epsilons)) {
+  lines(density(res_se[, 2, i], na.rm = T), col = i)
+  abline(v = mean(res_se[, 2, i]),
+         col = i,
+         lty = "dashed")
+}
+abline(v = ols_cov(covariance)[2, 2], col = "maroon3")
+
 ```
+
+# Next steps
+
+k = 3 to 10
+
+Algorithms to try
+Pertubing the sufficient statistic + regularization
+
+Being careful about bounding the data. Outlier removal.
+
+How to get rid of outliers?
+
+- starting with theoretical min max of columns
+- Estimate the means
+- calculate (avg) distance from means
+- calculate euclidian ball that captures most of the data points (e.g. 90 %)
+
+## Objective pertubation
+
+Log likelihood + noise
+
+## Noisy SGD
+
+gradients + noise
+
+# What are simple characteristics of the data for which the simple algorithm works
+
 
 # Old code / Trying DP-OLS with PSIlence library
 
