@@ -1,0 +1,68 @@
+---
+title: "| Statistical Analyses and Differential Privacy. \n| An Empirical Analysis \n | Replication Analysis \n"
+author: "Marcel Neunhoeffer - University of Mannheim"
+date: "Last updated: `r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document: default
+  html_document: default
+  html_notebook:
+    toc: yes
+---
+
+# 
+What happens without a C-compiler?
+
+```{r setup, echo=FALSE, include=FALSE}
+# Load libraries needed for this script. Install if needed.
+
+p_needed <- c("knitr", "devtools", "PSIlence", "reticulate", "data.table")
+
+packages <- rownames(installed.packages())
+p_to_install <- p_needed[!(p_needed %in% packages)]
+if (length(p_to_install) > 0) {
+  install.packages(p_to_install)
+}
+p_check <- sapply(p_needed, require, character.only = TRUE)
+
+
+p_needed_git <- c("privacytoolsproject/PSI-Library")
+if (any(p_check == F)) {
+  print(paste(
+    "Trying to install the following packages from github:",
+    names(p_check[p_check == F])
+  ))
+  devtools::install_github(p_needed_git)
+}
+p_check <- sapply(p_needed, require, character.only = TRUE)
+if (any(p_check == F)) {
+  print(paste("Could not install the following packages:", names(p_check[p_check == F])))
+}
+print(p_check)
+```
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+# Load data
+
+```{r}
+pusa <- fread("data/ss09pusa.csv", header = T)
+pusb <- fread("data/ss09pusb.csv", header = T)
+```
+
+# Pre-process data
+
+```{r}
+
+# Select columns from data pre-processing .do
+# keep serialno sporder adjinc pwgtp* agep sch schl sex wagp fod1p occp pincp wkhp rac1p hisp st esr
+
+sel <- c(toupper(c("serialno", "sporder", "adjinc")), colnames(pusa)[grep("pwgtp", colnames(pusa))],toupper(c("agep", "sch", "schl", "sex", "wagp", "fod1p", "occp", "pincp", "wkhp", "rac1p", "hisp", "st", "esr")))
+
+ACS_2009_all_short <- rbind(pusa[, sel, with = F], pusb[, sel, with = F])
+
+```
+
+
+
