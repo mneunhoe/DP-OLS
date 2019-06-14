@@ -47,7 +47,7 @@ Try executing this chunk by clicking the *Run* button within the chunk or by pla
 # Setup population
 
 ```{r}
-n <- 100000
+n <- 1000
 x1 <- rnorm(n, 0, 2)
 x2 <- rnorm(n, 0, 2)
 y <- 1 + 1 * x1 + 1 * x2 + 1 * x1 * x2 + rnorm(n, 0, 1)
@@ -292,6 +292,8 @@ ols_cov(covariance)
 ```
 
 ```{r DP-OLS as in PSIlence Library, warning = FALSE}
+# Calculate norm of each observation
+norm_vec <- function(x) sqrt(sum(x^2))
 # N is 1'1
 n <- covariance[2, 2]
 
@@ -311,6 +313,9 @@ covariance_sensitivity <- function(n, rng, intercept = 2) {
   }
   return(sensitivity)
 }
+
+max(apply(df, 1, norm_vec))
+max(apply(df, 2, norm_vec))
 
 # Set ranges for every data column
 rng <- matrix(NA,
@@ -340,7 +345,7 @@ res_se <- array(NA, dim = c(n_rep, d - 1, length(epsilons)))
 for (epsilon in 1:length(epsilons)) {
   for (rep in 1:n_rep) {
     # Laplace Noise as implemented in the PSIlence R-library
-    noise_scale <- sens / epsilons[epsilon]
+    noise_scale <- (max(apply(df, 1, norm_vec))^2) / (2*epsilons[epsilon])
     raw_L <-
       dpNoise(n = length(noise_scale),
               scale = noise_scale,
@@ -367,14 +372,14 @@ Produce plots from the results. The plots will be stored to the figures folder i
 
 ```{r Plotting}
 pdf(
-  file = paste0("figures/dp_ols_n", n, ".pdf"),
+  file = paste0("figures/dp_ols_n_max_norm_row_sq", n, ".pdf"),
   width = 16,
   height = 9
 )
 par(mfrow = c(2, 4))
 for (epsilon in 1:length(epsilons)) {
   plot(
-    dat$x,
+    dat$x1,
     dat$y,
     pch = 19,
     col = adjustcolor("black", 0.8),

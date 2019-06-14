@@ -64,5 +64,181 @@ ACS_2009_all_short <- rbind(pusa[, sel, with = F], pusb[, sel, with = F])
 
 ```
 
+# Crosswalk for occupations
 
+Original Stata code:
+```
+use "$pathw/ACS_2009_all_short.dta", clear
+gen census2000 = int(occp/10)
+sort census2000
+merge m:1 census2000 using "$pathw/Occ2000 to ISCO-88 translation_clean"
+
+rename ISCO88_4 ISCO_88_num
+keep if _merge == 3
+drop _merge
+
+save "$pathw/ACS_2009_all_short_PLUS_isco88.dta", replace
+```
+
+```{r}
+ACS_2009_all_short$census2000 <- ACS_2009_all_short$OCCP%/%10L
+
+crosswalk <- read.csv("data/Occ2000 to ISCO-88 translation_clean.csv")
+
+stata.merge <- function(x,y, by = intersect(names(x), names(y))){
+
+x[is.na(x)] <- Inf
+y[is.na(y)] <- Inf
+
+matched <- merge(x, y, by.x = by, by.y = by, all = TRUE)
+matched <- matched[complete.cases(matched),]
+matched$merge <- "matched"
+master <- merge(x, y, by.x = by, by.y = by, all.x = TRUE)
+master <- master[!complete.cases(master),]
+master$merge <- "master"
+using <- merge(x, y, by.x = by, by.y = by, all.y = TRUE)
+using <- using[!complete.cases(using),]
+using$merge <- "using"
+
+df <- rbind(matched, master,using)
+df[sapply(df, is.infinite)] <- NA
+df
+}
+
+ACS_2009_all_short_PLUS_isco88<- stata.merge(ACS_2009_all_short, crosswalk, by = "census2000")
+ACS_2009_all_short_PLUS_isco88 <- ACS_2009_all_short_PLUS_isco88[ACS_2009_all_short_PLUS_isco88$merge=="matched",]
+colnames(ACS_2009_all_short_PLUS_isco88)[colnames(ACS_2009_all_short_PLUS_isco88)=="ISCO88_4"] <- "ISCO_88_num"
+ACS_2009_all_short_PLUS_isco88$merge <- NULL
+
+```
+
+# Further Data Prep
+
+```
+*==============================================================================*/
+*					 3. Opening and recoding ACS data     	 	        	   *
+*==============================================================================*
+use "$data/ACS_2009_all_short_PLUS_isco88.dta", clear
+gen isco3_assign = int(ISCO_88_num/10)
+
+sort serialno sporder esr
+
+gen year = 2009 
+
+/// create an ID variable to identify cases we'll keep when we merge in new vars
+gen id_acs = _n
+summ id_acs
+
+tempfile r 
+save `r'
+
+/// bringing back original data files in order to get necessary variables
+use "$data/ACS_2009_pusa.dta", clear
+keep serialno sporder pernp pincp oip pap retp semp ssip ssp 
+sort serialno sporder 
+
+merge 1:1 serialno sporder using `r', gen(acsmerge1)
+
+
+tempfile q
+save `q'
+
+use "$data/ACS_2009_pusb.dta", clear
+keep serialno sporder pernp pincp oip pap retp semp ssip ssp
+sort serialno sporder
+
+merge 1:1 serialno sporder using `q', gen(acsmerge2)
+
+tab acsmerge1
+
+tab acsmerge2
+
+tab acsmerge1 if id_acs <.
+tab acsmerge2 if id_acs <.
+keep if id_acs <.
+
+
+append using `t'
+
+
+summ id_acs
+summ id_sipp
+```
+```{r}
+ACS_2009_all_short_PLUS_isco88$isco3_assign <- ACS_2009_all_short_PLUS_isco88$ISCO_88_num %/% 10
+
+ACS_2009_all_short_PLUS_isco88 <- ACS_2009_all_short_PLUS_isco88[order(ACS_2009_all_short_PLUS_isco88$SERIALNO, ACS_2009_all_short_PLUS_isco88$SPORDER, ACS_2009_all_short_PLUS_isco88$ESR),]
+
+ACS_2009_all_short_PLUS_isco88$year <- 2009
+
+ACS_2009_all_short_PLUS_isco88$id_acs <- 1:nrow(ACS_2009_all_short_PLUS_isco88)
+
+summary(ACS_2009_all_short_PLUS_isco88$id_acs)
+
+
+sel <- c(toupper(c("serialno", "sporder", "pernp", "pincp", "oip", "pap", "retp", "semp", "ssip", "ssp", "pwgtp" )))
+
+pus <- rbind(pusa[, sel, with = F], pusb[, sel, with = F])
+
+df <- merge(pus, ACS_2009_all_short_PLUS_isco88, by = c("SERIALNO", "SPORDER"))
+
+df$id <- df$id_acs
+
+df$weight09 <- df$PWGTP
+
+df$acs <- 1
+
+df <- df[df$AGEP >= 18 & df$AGEP <= 65, ]
+summary(ACS_2009_all_short$AGEP)
+summary(df$AGEP)
+
+df <- df[df$SCH <=1, ]
+```
+
+
+# Recoding Variables
+
+```
+*==============================================================================*/
+* 						 		4. Recoding variables    	  	        	   *
+*==============================================================================*
+/// now work on school level coding
+recode schl (01/02=1 "preschool") (03/11=2 "elementary") (12/13=3 "lower hs") (14/15=4 "upper hs") (16/19=5 "hs degree") (20=6 "associates") (21=7 "bachelors") (22=8 "masters") (23/24=9 "prof and phd"), gen(schlnew1)
+recode HighestEd (1/1=1 "preschool") (2/4=2 "elementary") (5/6=3 "lower hs")(7/8=4 "upper hs")(9/10=5 "hs degree")(11/12=6 "associates") (13=7 "bachelors") (14=8 "masters") (15/16=9 "prof and phd"), gen(schlnew2) 
+
+
+gen schlnew_old =.
+replace schlnew_old = 1 if schlnew1==1 | schlnew2==1 
+replace schlnew_old = 2 if schlnew1==2 | schlnew2==2 
+replace schlnew_old = 3 if schlnew1==3 | schlnew2==3 
+replace schlnew_old = 4 if schlnew1==4 | schlnew2==4 
+replace schlnew_old = 5 if schlnew1==5 | schlnew2==5 
+replace schlnew_old = 6 if schlnew1==6 | schlnew2==6 
+replace schlnew_old = 7 if schlnew1==7 | schlnew2==7
+replace schlnew_old = 8 if schlnew1==8 | schlnew2==8 
+replace schlnew_old = 9 if schlnew1==9 | schlnew2==9 
+
+tab schlnew_old acs
+summ isco3_assign if acs==0
+```
+```{r}
+df$schlnew1 <- NA
+
+df$schlnew1[df$SCHL %in% 1:2] <- 1
+df$schlnew1[df$SCHL %in% 3:11] <- 2
+df$schlnew1[df$SCHL %in% 12:13] <- 3
+df$schlnew1[df$SCHL %in% 14:15] <- 4
+df$schlnew1[df$SCHL %in% 16:19] <- 5
+df$schlnew1[df$SCHL %in% 20] <- 6
+df$schlnew1[df$SCHL %in% 21] <- 7
+df$schlnew1[df$SCHL %in% 22] <- 8
+df$schlnew1[df$SCHL %in% 23:24] <- 9
+
+df$schlnew_old <- df$schlnew1
+
+df <- df[!is.na(df$isco3_assign),]
+
+df$
+
+```
 
